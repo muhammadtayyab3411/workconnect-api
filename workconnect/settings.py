@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'rest_framework_simplejwt',
+    'channels',  # Django Channels for WebSocket support
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
@@ -55,6 +56,7 @@ INSTALLED_APPS = [
     # Local apps
     'users',
     'api',
+    'chat',  # Chat system app
 ]
 
 MIDDLEWARE = [
@@ -88,6 +90,16 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'workconnect.wsgi.application'
+
+# ASGI application for Django Channels
+ASGI_APPLICATION = 'workconnect.asgi.application'
+
+# Channel layers configuration
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
+}
 
 
 # Database
