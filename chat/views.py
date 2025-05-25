@@ -26,10 +26,12 @@ class ConversationViewSet(viewsets.ModelViewSet):
         """Get conversations where the user is a participant."""
         return Conversation.objects.filter(
             participants=self.request.user
-        ).prefetch_related(
-            'participants',
+        ).select_related(
             'job',
-            Prefetch('messages', queryset=Message.objects.order_by('-created_at')[:1])
+            'last_message',
+            'last_message__sender'
+        ).prefetch_related(
+            'participants'
         ).distinct()
     
     def get_serializer_class(self):
@@ -89,36 +91,25 @@ class ConversationViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['patch'])
     def mark_as_read(self, request, pk=None):
-        """Mark all messages in a conversation as read."""
+        """Mark messages as read in a conversation."""
         conversation = self.get_object()
+        message_ids = request.data.get('message_ids', [])
         
-        # Mark all unread messages from other users as read
-        updated_count = conversation.messages.filter(
-            is_read=False
-        ).exclude(sender=request.user).update(is_read=True)
+        if message_ids:
+            # Mark specific messages as read
+            updated_count = conversation.messages.filter(
+                id__in=message_ids
+            ).exclude(sender=request.user).update(is_read=True)
+        else:
+            # Mark all unread messages as read
+            updated_count = conversation.messages.filter(
+                is_read=False
+            ).exclude(sender=request.user).update(is_read=True)
         
         return Response({
-            'message': f'Marked {updated_count} messages as read',
+            'message': f'{updated_count} messages marked as read',
             'updated_count': updated_count
         })
-    
-    @action(detail=False, methods=['get'])
-    def search(self, request):
-        """Search conversations by participant name or job title."""
-        query = request.query_params.get('q', '').strip()
-        
-        if not query:
-            return Response({'results': []})
-        
-        conversations = self.get_queryset().filter(
-            Q(participants__first_name__icontains=query) |
-            Q(participants__last_name__icontains=query) |
-            Q(participants__email__icontains=query) |
-            Q(job__title__icontains=query)
-        ).distinct()
-        
-        serializer = self.get_serializer(conversations, many=True)
-        return Response({'results': serializer.data})
 
 
 class MessageViewSet(viewsets.ReadOnlyModelViewSet):

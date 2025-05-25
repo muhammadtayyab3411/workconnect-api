@@ -5,6 +5,7 @@ from channels.db import database_sync_to_async
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
 from .models import Conversation, Message, UserPresence
+from django.conf import settings
 
 User = get_user_model()
 
@@ -94,13 +95,16 @@ class ChatConsumer(AsyncWebsocketConsumer):
                         'sender': {
                             'id': message.sender.id,
                             'name': message.sender.get_full_name() or message.sender.email,
-                            'avatar': message.sender.profile_picture.url if message.sender.profile_picture else None
+                            'avatar': self.get_avatar_url(message.sender)
                         },
                         'created_at': message.created_at.isoformat(),
                         'is_read': message.is_read
                     }
                 }
             )
+            
+            # Send global notifications to all participants (except sender)
+            await self.send_global_notifications(message)
     
     async def handle_mark_as_read(self, data):
         message_ids = data.get('message_ids', [])
@@ -183,6 +187,15 @@ class ChatConsumer(AsyncWebsocketConsumer):
         ).exclude(sender=self.user).update(is_read=True)
     
     @database_sync_to_async
+    def get_conversation_participants(self):
+        """Get list of participant IDs for the current conversation"""
+        try:
+            conversation = Conversation.objects.get(id=self.conversation_id)
+            return list(conversation.participants.values_list('id', flat=True))
+        except Conversation.DoesNotExist:
+            return []
+    
+    @database_sync_to_async
     def update_user_presence(self, is_online):
         presence, created = UserPresence.objects.get_or_create(
             user=self.user,
@@ -191,6 +204,36 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if not created:
             presence.is_online = is_online
             presence.save()
+
+    def get_avatar_url(self, user):
+        """Generate absolute URL for user avatar"""
+        if user.profile_picture:
+            # Build absolute URL - we need to construct it manually since we don't have request context
+            base_url = getattr(settings, 'SITE_URL', 'http://localhost:8000')
+            return f"{base_url}{user.profile_picture.url}"
+        return None
+
+    async def send_global_notifications(self, message):
+        """Send global notifications to all conversation participants except sender"""
+        participants = await self.get_conversation_participants()
+        sender_name = message.sender.get_full_name() or message.sender.email
+        
+        for participant_id in participants:
+            if participant_id != message.sender.id:  # Don't notify sender
+                await self.channel_layer.group_send(
+                    f'notifications_{participant_id}',
+                    {
+                        'type': 'new_message_notification',
+                        'conversation_id': str(self.conversation_id),
+                        'message': {
+                            'id': str(message.id),
+                            'content': message.content,
+                            'sender_name': sender_name,
+                            'created_at': message.created_at.isoformat()
+                        },
+                        'sender_name': sender_name
+                    }
+                )
 
 
 class PresenceConsumer(AsyncWebsocketConsumer):
@@ -217,6 +260,13 @@ class PresenceConsumer(AsyncWebsocketConsumer):
         
         # Update user presence to online
         await self.update_user_presence(True)
+        
+        # Send initial presence data to the connecting user
+        online_users = await self.get_online_users()
+        await self.send(text_data=json.dumps({
+            'type': 'initial_presence',
+            'online_users': online_users
+        }))
         
         # Notify others that user is online
         await self.channel_layer.group_send(
@@ -268,4 +318,50 @@ class PresenceConsumer(AsyncWebsocketConsumer):
         )
         if not created:
             presence.is_online = is_online
-            presence.save() 
+            presence.save()
+
+    @database_sync_to_async
+    def get_online_users(self):
+        """Get list of currently online user IDs"""
+        return list(UserPresence.objects.filter(is_online=True).values_list('user_id', flat=True))
+
+
+class GlobalNotificationsConsumer(AsyncWebsocketConsumer):
+    """
+    WebSocket consumer for handling global notifications (new messages in other conversations).
+    """
+    
+    async def connect(self):
+        self.user = self.scope['user']
+        
+        if not self.user.is_authenticated:
+            await self.close()
+            return
+        
+        self.room_group_name = f'notifications_{self.user.id}'
+        
+        # Join user's notification group
+        await self.channel_layer.group_add(
+            self.room_group_name,
+            self.channel_name
+        )
+        
+        await self.accept()
+        print(f"Global notifications connected for user {self.user.id}")
+    
+    async def disconnect(self, close_code):
+        # Leave notification group
+        await self.channel_layer.group_discard(
+            self.room_group_name,
+            self.channel_name
+        )
+        print(f"Global notifications disconnected for user {self.user.id}")
+    
+    async def new_message_notification(self, event):
+        """Send notification about new message in a conversation"""
+        await self.send(text_data=json.dumps({
+            'type': 'new_message_notification',
+            'conversation_id': event['conversation_id'],
+            'message': event['message'],
+            'sender_name': event['sender_name']
+        })) 
