@@ -95,10 +95,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
                         'sender': {
                             'id': message.sender.id,
                             'name': message.sender.get_full_name() or message.sender.email,
-                            'avatar': self.get_avatar_url(message.sender)
+                            'avatar': self.get_avatar_url(message.sender),
+                            'role': message.sender.role
                         },
+                        'file_url': self.get_file_url(message),
+                        'is_read': message.is_read,
                         'created_at': message.created_at.isoformat(),
-                        'is_read': message.is_read
+                        'updated_at': message.updated_at.isoformat()
                     }
                 }
             )
@@ -208,9 +211,17 @@ class ChatConsumer(AsyncWebsocketConsumer):
     def get_avatar_url(self, user):
         """Generate absolute URL for user avatar"""
         if user.profile_picture:
-            # Build absolute URL - we need to construct it manually since we don't have request context
-            base_url = getattr(settings, 'SITE_URL', 'http://localhost:8000')
+            # Build absolute URL - API server runs on port 8001
+            base_url = getattr(settings, 'SITE_URL', 'http://localhost:8001')
             return f"{base_url}{user.profile_picture.url}"
+        return None
+
+    def get_file_url(self, message):
+        """Generate absolute URL for message file attachment"""
+        if message.file_attachment:
+            # Build absolute URL - API server runs on port 8001
+            base_url = getattr(settings, 'SITE_URL', 'http://localhost:8001')
+            return f"{base_url}{message.file_attachment.url}"
         return None
 
     async def send_global_notifications(self, message):

@@ -5,6 +5,9 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import Q, Prefetch
 from django.shortcuts import get_object_or_404
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+from django.conf import settings
 from .models import Conversation, Message, UserPresence
 from .serializers import (
     ConversationListSerializer,
@@ -74,17 +77,85 @@ class ConversationViewSet(viewsets.ModelViewSet):
             'has_more': conversation.messages.count() > offset + page_size
         })
     
+    def broadcast_message(self, message, conversation):
+        """Broadcast message to WebSocket consumers for real-time updates."""
+        channel_layer = get_channel_layer()
+        room_group_name = f'chat_{conversation.id}'
+        
+        # Get avatar URL
+        avatar_url = None
+        if message.sender.profile_picture:
+            base_url = getattr(settings, 'SITE_URL', 'http://localhost:8001')
+            avatar_url = f"{base_url}{message.sender.profile_picture.url}"
+        
+        # Get file URL
+        file_url = None
+        if message.file_attachment:
+            base_url = getattr(settings, 'SITE_URL', 'http://localhost:8001')
+            file_url = f"{base_url}{message.file_attachment.url}"
+        
+        # Broadcast to conversation participants
+        async_to_sync(channel_layer.group_send)(
+            room_group_name,
+            {
+                'type': 'chat_message',
+                'message': {
+                    'id': str(message.id),
+                    'content': message.content,
+                    'message_type': message.message_type,
+                    'sender': {
+                        'id': message.sender.id,
+                        'name': message.sender.get_full_name() or message.sender.email,
+                        'avatar': avatar_url,
+                        'role': message.sender.role
+                    },
+                    'file_url': file_url,
+                    'is_read': message.is_read,
+                    'created_at': message.created_at.isoformat(),
+                    'updated_at': message.updated_at.isoformat()
+                }
+            }
+        )
+        
+        # Send global notifications to participants (except sender)
+        participants = conversation.participants.exclude(id=message.sender.id)
+        sender_name = message.sender.get_full_name() or message.sender.email
+        
+        for participant in participants:
+            async_to_sync(channel_layer.group_send)(
+                f'notifications_{participant.id}',
+                {
+                    'type': 'new_message_notification',
+                    'conversation_id': str(conversation.id),
+                    'message': {
+                        'id': str(message.id),
+                        'content': message.content,
+                        'sender_name': sender_name,
+                        'created_at': message.created_at.isoformat()
+                    },
+                    'sender_name': sender_name
+                }
+            )
+
     @action(detail=True, methods=['post'])
     def send_message(self, request, pk=None):
         """Send a message in a conversation (fallback for non-WebSocket)."""
         conversation = self.get_object()
         
+        # Combine request.data and request.FILES for proper file handling
+        data = request.data.copy()
+        if request.FILES:
+            data.update(request.FILES)
+        
         serializer = MessageCreateSerializer(
-            data=request.data,
+            data=data,
             context={'request': request, 'conversation_id': conversation.id}
         )
         serializer.is_valid(raise_exception=True)
         message = serializer.save()
+        
+        # Broadcast message to WebSocket consumers for real-time updates
+        self.broadcast_message(message, conversation)
         
         response_serializer = MessageSerializer(message, context={'request': request})
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
