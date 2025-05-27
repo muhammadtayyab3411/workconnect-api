@@ -28,7 +28,9 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-xz$t!^!&^_c$kl5_@9f=0
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = []
+# Parse ALLOWED_HOSTS from environment variable (comma-separated)
+ALLOWED_HOSTS_STR = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,192.168.100.90')
+ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS_STR.split(',') if host.strip()]
 
 
 # Application definition
@@ -153,6 +155,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # Media files (Uploaded files)
 MEDIA_URL = '/media/'

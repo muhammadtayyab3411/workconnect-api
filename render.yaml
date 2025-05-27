@@ -1,0 +1,61 @@
+services:
+  - type: web
+    name: workconnect-api
+    env: docker
+    dockerfilePath: ./Dockerfile.render
+    plan: starter
+    region: oregon
+    branch: main
+    healthCheckPath: /api/health/
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: workconnect.settings
+      - key: DEBUG
+        value: false
+      - key: ALLOWED_HOSTS
+        value: workconnect-api.onrender.com,localhost,127.0.0.1
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DB_NAME
+        fromDatabase:
+          name: workconnect-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: workconnect-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: workconnect-db
+          property: password
+      - key: DB_HOST
+        fromDatabase:
+          name: workconnect-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: workconnect-db
+          property: port
+      # Add your other environment variables here
+      - key: GOOGLE_CLIENT_ID
+        value: # Add your Google Client ID
+      - key: GOOGLE_CLIENT_SECRET
+        value: # Add your Google Client Secret
+      - key: STRIPE_PUBLISHABLE_KEY
+        value: # Add your Stripe Publishable Key
+      - key: STRIPE_SECRET_KEY
+        value: # Add your Stripe Secret Key
+      - key: GEMINI_API_KEY
+        value: # Add your Gemini API Key
+      - key: EMAIL_HOST_USER
+        value: # Add your email
+      - key: EMAIL_HOST_PASSWORD
+        value: # Add your email password
+      - key: FRONTEND_URL
+        value: https://your-frontend-domain.com
+
+databases:
+  - name: workconnect-db
+    databaseName: workconnect
+    user: workconnect_user
+    plan: starter 
