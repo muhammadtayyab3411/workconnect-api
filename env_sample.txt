@@ -11,7 +11,7 @@ DB_PORT=5432
 # Django Configuration
 SECRET_KEY=your-secret-key-here
 DEBUG=True
-ALLOWED_HOSTS=localhost,127.0.0.1
+ALLOWED_HOSTS=localhost,127.0.0.1,workconnect-api.onrender.com
 
 # Social Authentication (Optional)
 GOOGLE_CLIENT_ID=your-google-client-id

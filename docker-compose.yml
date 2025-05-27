@@ -33,7 +33,7 @@ services:
       - DB_HOST=db
       - DB_PORT=5432
       - SECRET_KEY=django-insecure-docker-dev-key-change-in-production
-      - ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0
+      - ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,workconnect-api.onrender.com
     depends_on:
       db:
         condition: service_healthy
