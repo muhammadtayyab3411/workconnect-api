@@ -86,8 +86,8 @@ application = ProtocolTypeRouter({
 - `GET /api/chat/presence/` - Get user presence status
 
 ### WebSocket Endpoints
-- `ws://localhost:8000/ws/chat/{conversation_id}/` - Real-time chat
-- `ws://localhost:8000/ws/presence/` - User presence updates
+- `ws://localhost:8001/ws/chat/{conversation_id}/` - Real-time chat
+- `ws://localhost:8001/ws/presence/` - User presence updates
 
 ## 📱 WebSocket Events
 
@@ -184,7 +184,7 @@ npm install socket.io-client
 ```javascript
 import io from 'socket.io-client';
 
-const socket = io('ws://localhost:8000/ws/chat/{conversationId}/', {
+const socket = io('ws://localhost:8001/ws/chat/{conversationId}/', {
     auth: {
         token: userToken
     }

@@ -23,6 +23,9 @@ urlpatterns = [
     path('invoices/<int:invoice_id>/', views.invoice_detail, name='invoice_detail'),
     path('invoices/<int:invoice_id>/pay/', views.pay_invoice, name='pay_invoice'),
     
+    # Stripe checkout
+    path('create-checkout-session/', views.create_checkout_session, name='create_checkout_session'),
+    
     # Stripe webhooks
     path('stripe/webhook/', views.stripe_webhook, name='stripe_webhook'),
 ] 

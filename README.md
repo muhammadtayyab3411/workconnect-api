@@ -109,7 +109,7 @@ This is the Django REST API backend for the WorkConnect platform.
    python manage.py runserver
    ```
 
-The API will be available at `http://localhost:8000`
+The API will be available at `http://localhost:8001`
 
 ## Database Configuration
 

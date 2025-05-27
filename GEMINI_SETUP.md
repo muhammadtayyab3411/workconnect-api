@@ -123,7 +123,7 @@ DATABASE_URL=sqlite:///db.sqlite3
 ### Test Document Upload
 ```bash
 curl -X POST \
-  http://localhost:8000/api/auth/profile/documents/upload/ \
+  http://localhost:8001/api/auth/profile/documents/upload/ \
   -H "Authorization: Bearer your_jwt_token" \
   -F "document_type=national_id" \
   -F "document_file=@path/to/id_card.jpg"

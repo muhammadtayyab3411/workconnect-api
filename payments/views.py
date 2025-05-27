@@ -25,16 +25,15 @@ logger = logging.getLogger(__name__)
 
 @api_view(['GET'])
 def stripe_config(request):
-    """Get Stripe publishable key"""
+    """Get Stripe publishable key - Public endpoint"""
     return Response({
         'publishable_key': settings.STRIPE_PUBLISHABLE_KEY
     })
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
 def subscription_plans(request):
-    """List all active subscription plans"""
+    """List all active subscription plans - Public endpoint"""
     plans = SubscriptionPlan.objects.filter(is_active=True)
     serializer = SubscriptionPlanSerializer(plans, many=True)
     return Response(serializer.data)
@@ -392,3 +391,76 @@ def _handle_payment_intent_failed(payment_intent):
         logger.warning(f"Job invoice {job_invoice.id} payment failed")
     except JobInvoice.DoesNotExist:
         logger.warning(f"Job invoice with payment intent {payment_intent['id']} not found")
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_checkout_session(request):
+    """Create a Stripe checkout session for subscription"""
+    try:
+        plan_id = request.data.get('plan_id')
+        billing_cycle = request.data.get('billing_cycle', 'monthly')
+        
+        if not plan_id:
+            return Response({'error': 'Plan ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get the subscription plan
+        try:
+            plan = SubscriptionPlan.objects.get(id=plan_id, is_active=True)
+        except SubscriptionPlan.DoesNotExist:
+            return Response({'error': 'Invalid plan'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if user already has an active subscription
+        existing_subscription = UserSubscription.objects.filter(
+            user=request.user,
+            status__in=['active', 'trialing']
+        ).first()
+        
+        if existing_subscription:
+            return Response({'error': 'User already has an active subscription'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Create Stripe checkout session
+        stripe_service = StripeService()
+        
+        # Get or create Stripe customer
+        customer = stripe_service.get_or_create_customer(request.user)
+        
+        # Determine price based on billing cycle
+        price = plan.price_monthly if billing_cycle == 'monthly' else plan.price_yearly
+        
+        # Create checkout session
+        checkout_session = stripe.checkout.Session.create(
+            customer=customer.id,
+            payment_method_types=['card'],
+            line_items=[{
+                'price_data': {
+                    'currency': 'usd',
+                    'product_data': {
+                        'name': f'{plan.name} Plan',
+                        'description': f'WorkConnect {plan.name} subscription - {billing_cycle} billing',
+                    },
+                    'unit_amount': int(price * 100),  # Convert to cents
+                    'recurring': {
+                        'interval': 'month' if billing_cycle == 'monthly' else 'year',
+                    },
+                },
+                'quantity': 1,
+            }],
+            mode='subscription',
+            success_url=f"{settings.FRONTEND_URL}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{settings.FRONTEND_URL}/checkout?cancelled=true",
+            metadata={
+                'user_id': request.user.id,
+                'plan_id': plan.id,
+                'billing_cycle': billing_cycle,
+            }
+        )
+        
+        return Response({
+            'checkout_url': checkout_session.url,
+            'session_id': checkout_session.id
+        })
+        
+    except Exception as e:
+        logger.error(f"Error creating checkout session: {str(e)}")
+        return Response({'error': 'Failed to create checkout session'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
