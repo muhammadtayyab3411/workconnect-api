@@ -13,6 +13,14 @@ from .serializers import (
 )
 from .stripe_service import StripeService
 import stripe
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
+from django.http import HttpResponse
+from django.utils import timezone
+import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @api_view(['GET'])
@@ -234,3 +242,153 @@ def pay_invoice(request, invoice_id):
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@csrf_exempt
+@require_POST
+def stripe_webhook(request):
+    """Handle Stripe webhook events"""
+    payload = request.body
+    sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
+    endpoint_secret = settings.STRIPE_WEBHOOK_SECRET
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, endpoint_secret
+        )
+    except ValueError:
+        logger.error("Invalid payload in Stripe webhook")
+        return HttpResponse(status=400)
+    except stripe.error.SignatureVerificationError:
+        logger.error("Invalid signature in Stripe webhook")
+        return HttpResponse(status=400)
+
+    # Check if we've already processed this event
+    from .models import StripeWebhookEvent
+    webhook_event, created = StripeWebhookEvent.objects.get_or_create(
+        stripe_event_id=event['id'],
+        defaults={
+            'event_type': event['type'],
+            'processed': False
+        }
+    )
+    
+    if not created and webhook_event.processed:
+        logger.info(f"Webhook event {event['id']} already processed")
+        return HttpResponse(status=200)
+
+    try:
+        # Handle the event
+        if event['type'] == 'customer.subscription.created':
+            _handle_subscription_created(event['data']['object'])
+        elif event['type'] == 'customer.subscription.updated':
+            _handle_subscription_updated(event['data']['object'])
+        elif event['type'] == 'customer.subscription.deleted':
+            _handle_subscription_deleted(event['data']['object'])
+        elif event['type'] == 'invoice.payment_succeeded':
+            _handle_invoice_payment_succeeded(event['data']['object'])
+        elif event['type'] == 'invoice.payment_failed':
+            _handle_invoice_payment_failed(event['data']['object'])
+        elif event['type'] == 'payment_intent.succeeded':
+            _handle_payment_intent_succeeded(event['data']['object'])
+        elif event['type'] == 'payment_intent.payment_failed':
+            _handle_payment_intent_failed(event['data']['object'])
+        else:
+            logger.info(f"Unhandled event type: {event['type']}")
+
+        # Mark as processed
+        webhook_event.processed = True
+        webhook_event.save()
+        
+        return HttpResponse(status=200)
+        
+    except Exception as e:
+        logger.error(f"Error processing webhook {event['id']}: {str(e)}")
+        return HttpResponse(status=500)
+
+
+def _handle_subscription_created(subscription):
+    """Handle subscription created event"""
+    try:
+        user_subscription = UserSubscription.objects.get(
+            stripe_subscription_id=subscription['id']
+        )
+        user_subscription.status = subscription['status']
+        user_subscription.save()
+        logger.info(f"Updated subscription {subscription['id']} status to {subscription['status']}")
+    except UserSubscription.DoesNotExist:
+        logger.warning(f"Subscription {subscription['id']} not found in database")
+
+
+def _handle_subscription_updated(subscription):
+    """Handle subscription updated event"""
+    try:
+        user_subscription = UserSubscription.objects.get(
+            stripe_subscription_id=subscription['id']
+        )
+        user_subscription.status = subscription['status']
+        user_subscription.current_period_start = subscription['current_period_start']
+        user_subscription.current_period_end = subscription['current_period_end']
+        user_subscription.cancel_at_period_end = subscription.get('cancel_at_period_end', False)
+        user_subscription.save()
+        logger.info(f"Updated subscription {subscription['id']}")
+    except UserSubscription.DoesNotExist:
+        logger.warning(f"Subscription {subscription['id']} not found in database")
+
+
+def _handle_subscription_deleted(subscription):
+    """Handle subscription deleted event"""
+    try:
+        user_subscription = UserSubscription.objects.get(
+            stripe_subscription_id=subscription['id']
+        )
+        user_subscription.status = 'canceled'
+        user_subscription.save()
+        logger.info(f"Canceled subscription {subscription['id']}")
+    except UserSubscription.DoesNotExist:
+        logger.warning(f"Subscription {subscription['id']} not found in database")
+
+
+def _handle_invoice_payment_succeeded(invoice):
+    """Handle successful invoice payment"""
+    # This is for subscription invoices
+    logger.info(f"Invoice {invoice['id']} payment succeeded")
+
+
+def _handle_invoice_payment_failed(invoice):
+    """Handle failed invoice payment"""
+    logger.warning(f"Invoice {invoice['id']} payment failed")
+
+
+def _handle_payment_intent_succeeded(payment_intent):
+    """Handle successful payment intent (for job payments)"""
+    try:
+        # Find job invoice by payment intent ID
+        job_invoice = JobInvoice.objects.get(
+            stripe_payment_intent_id=payment_intent['id']
+        )
+        job_invoice.status = 'paid'
+        job_invoice.paid_at = timezone.now()
+        job_invoice.save()
+        
+        # Update job status to completed
+        job_invoice.job.status = 'completed'
+        job_invoice.job.save()
+        
+        logger.info(f"Job invoice {job_invoice.id} marked as paid")
+        
+    except JobInvoice.DoesNotExist:
+        logger.warning(f"Job invoice with payment intent {payment_intent['id']} not found")
+
+
+def _handle_payment_intent_failed(payment_intent):
+    """Handle failed payment intent"""
+    try:
+        job_invoice = JobInvoice.objects.get(
+            stripe_payment_intent_id=payment_intent['id']
+        )
+        job_invoice.status = 'failed'
+        job_invoice.save()
+        logger.warning(f"Job invoice {job_invoice.id} payment failed")
+    except JobInvoice.DoesNotExist:
+        logger.warning(f"Job invoice with payment intent {payment_intent['id']} not found")
