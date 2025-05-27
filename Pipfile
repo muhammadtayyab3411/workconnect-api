@@ -21,6 +21,7 @@ google-auth-httplib2 = "*"
 google-generativeai = "*"
 channels = "*"
 daphne = "*"
+stripe = "*"
 
 [dev-packages]
 

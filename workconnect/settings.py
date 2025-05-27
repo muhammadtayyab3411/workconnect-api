@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'users',
     'api',
     'chat',  # Chat system app
+    'payments',  # Stripe payments app
 ]
 
 MIDDLEWARE = [
@@ -249,3 +250,8 @@ FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
 
 # Gemini API Configuration
 GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
+
+# Stripe Configuration
+STRIPE_PUBLISHABLE_KEY = config('STRIPE_PUBLISHABLE_KEY', default='')
+STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY', default='')
+STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET', default='')
