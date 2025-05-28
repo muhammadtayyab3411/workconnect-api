@@ -55,9 +55,34 @@ else:
 # Wait for database
 wait_for_db
 
+# Show database configuration for debugging
+echo "🔍 Database configuration:"
+if [ -n "$DATABASE_URL" ]; then
+    echo "Using DATABASE_URL (production mode)"
+    # Don't print the full URL for security, just show it's set
+    echo "DATABASE_URL is set: ${DATABASE_URL:0:20}..."
+else
+    echo "Using individual DB environment variables (development mode)"
+    echo "DB_HOST: ${DB_HOST:-localhost}"
+    echo "DB_NAME: ${DB_NAME:-workconnect}"
+    echo "DB_USER: ${DB_USER:-postgres}"
+fi
+
+# Check Django configuration
+echo "🔧 Checking Django configuration..."
+python manage.py check --deploy || echo "⚠️ Django check failed, continuing..."
+
+# Show migration status
+echo "📊 Checking migration status..."
+python manage.py showmigrations || echo "⚠️ Could not show migrations, continuing..."
+
 # Run database migrations
 echo "📊 Running database migrations..."
-python manage.py migrate --noinput
+python manage.py migrate --noinput --verbosity=2
+
+# Verify migrations were applied
+echo "✅ Verifying migrations..."
+python manage.py showmigrations | grep -E "\[X\]" | wc -l | xargs echo "Applied migrations count:"
 
 # Collect static files
 echo "📁 Collecting static files..."
