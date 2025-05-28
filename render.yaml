@@ -7,7 +7,6 @@ services:
     region: oregon
     branch: main
     healthCheckPath: /api/health/
-    startCommand: "./startup.sh"
     envVars:
       - key: DJANGO_SETTINGS_MODULE
         value: workconnect.settings

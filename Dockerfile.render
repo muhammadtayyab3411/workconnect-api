@@ -36,8 +36,8 @@ COPY . .
 # Create media directory
 RUN mkdir -p media
 
-# Make startup script executable
-RUN chmod +x startup.sh
+# Collect static files during build
+RUN python manage.py collectstatic --noinput --clear || true
 
 # Create a non-root user and change ownership
 RUN adduser --disabled-password --gecos '' appuser
@@ -53,5 +53,5 @@ EXPOSE 8001
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8001/api/health/ || exit 1
 
-# Use the startup script
-CMD ["./startup.sh"] 
+# Start the application directly - migrations will run automatically in ASGI
+CMD ["daphne", "-p", "8001", "-b", "0.0.0.0", "workconnect.asgi:application"] 
