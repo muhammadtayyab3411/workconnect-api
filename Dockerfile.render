@@ -28,7 +28,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Explicitly install critical packages to ensure they're available
-RUN pip install --no-cache-dir dj-database-url==2.3.0 whitenoise==6.8.2
+RUN pip install --no-cache-dir dj-database-url==2.3.0
 
 # Copy project
 COPY . .
