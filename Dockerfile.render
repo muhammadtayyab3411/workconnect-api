@@ -31,6 +31,9 @@ COPY . .
 # Create media directory
 RUN mkdir -p media
 
+# Make start script executable
+RUN chmod +x start.sh
+
 # Create a non-root user
 RUN adduser --disabled-password --gecos '' appuser
 RUN chown -R appuser:appuser /app
@@ -43,5 +46,5 @@ EXPOSE 8001
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8001/api/health/ || exit 1
 
-# Run the application using daphne
-CMD ["daphne", "-p", "8001", "-b", "0.0.0.0", "workconnect.asgi:application"] 
+# Run the application using the startup script
+CMD ["./start.sh"] 
