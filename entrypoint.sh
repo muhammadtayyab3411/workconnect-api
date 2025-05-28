@@ -5,6 +5,17 @@ set -e
 
 echo "🚀 Starting WorkConnect API..."
 
+# Verify Python packages
+echo "🔍 Verifying Python packages..."
+python -c "import django; print(f'Django version: {django.get_version()}')"
+python -c "
+try:
+    import dj_database_url
+    print('✅ dj-database-url is available')
+except ImportError:
+    print('❌ dj-database-url is NOT available')
+"
+
 # Function to wait for database
 wait_for_db() {
     echo "⏳ Waiting for database connection..."

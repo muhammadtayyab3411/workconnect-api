@@ -14,7 +14,14 @@ import os
 from datetime import timedelta
 from pathlib import Path
 from decouple import config
-import dj_database_url
+
+# Try to import dj_database_url, fallback if not available
+try:
+    import dj_database_url
+    HAS_DJ_DATABASE_URL = True
+except ImportError:
+    HAS_DJ_DATABASE_URL = False
+    print("Warning: dj-database-url not available, using fallback database configuration")
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -112,10 +119,27 @@ CHANNEL_LAYERS = {
 # Check if DATABASE_URL is provided (for production environments like Render)
 DATABASE_URL = config('DATABASE_URL', default=None)
 
-if DATABASE_URL:
+if DATABASE_URL and HAS_DJ_DATABASE_URL:
     # Parse DATABASE_URL for production
     DATABASES = {
         'default': dj_database_url.parse(DATABASE_URL, conn_max_age=600, ssl_require=True)
+    }
+elif DATABASE_URL and not HAS_DJ_DATABASE_URL:
+    # Manual parsing if dj_database_url is not available
+    from urllib.parse import urlparse
+    url = urlparse(DATABASE_URL)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': url.path[1:],
+            'USER': url.username,
+            'PASSWORD': url.password,
+            'HOST': url.hostname,
+            'PORT': url.port or 5432,
+            'OPTIONS': {
+                'sslmode': 'require',
+            },
+        }
     }
 else:
     # Use individual environment variables for development

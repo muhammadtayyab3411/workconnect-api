@@ -18,12 +18,17 @@ RUN apt-get update \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip
-RUN pip install --upgrade pip
+# Upgrade pip and clear cache
+RUN pip install --upgrade pip && pip cache purge
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
+
+# Install requirements with no cache to ensure fresh install
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Explicitly install dj-database-url to ensure it's available
+RUN pip install --no-cache-dir dj-database-url==2.3.0
 
 # Copy project
 COPY . .
