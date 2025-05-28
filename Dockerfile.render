@@ -53,5 +53,5 @@ EXPOSE 8001
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8001/api/health/ || exit 1
 
-# Use the entrypoint script
-CMD ["./entrypoint.sh"] 
+# Use ENTRYPOINT to ensure our script always runs
+ENTRYPOINT ["./entrypoint.sh"] 

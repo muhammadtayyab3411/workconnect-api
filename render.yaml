@@ -16,26 +16,10 @@ services:
         value: workconnect-api.onrender.com,localhost,127.0.0.1
       - key: SECRET_KEY
         generateValue: true
-      - key: DB_NAME
+      - key: DATABASE_URL
         fromDatabase:
           name: workconnect-db
-          property: database
-      - key: DB_USER
-        fromDatabase:
-          name: workconnect-db
-          property: user
-      - key: DB_PASSWORD
-        fromDatabase:
-          name: workconnect-db
-          property: password
-      - key: DB_HOST
-        fromDatabase:
-          name: workconnect-db
-          property: host
-      - key: DB_PORT
-        fromDatabase:
-          name: workconnect-db
-          property: port
+          property: connectionString
       # Add your other environment variables here
       - key: GOOGLE_CLIENT_ID
         value: # Add your Google Client ID
