@@ -48,5 +48,5 @@ EXPOSE 8001
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8001/api/health/ || exit 1
 
-# Use the entrypoint script
-CMD ["./entrypoint.sh"] 
+# Run migrations and start the application
+CMD ["sh", "-c", "echo 'Starting WorkConnect API...' && python manage.py migrate --noinput && echo 'Migrations completed' && python manage.py collectstatic --noinput --clear && echo 'Static files collected' && python manage.py shell -c \"from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.filter(is_superuser=True).exists() or User.objects.create_superuser('admin', 'admin@workconnect.com', 'admin123')\" && echo 'Starting server...' && daphne -p 8001 -b 0.0.0.0 workconnect.asgi:application"] 
