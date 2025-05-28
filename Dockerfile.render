@@ -31,12 +31,14 @@ COPY . .
 # Create media directory
 RUN mkdir -p media
 
-# Make start script executable
-RUN chmod +x start.sh
+# Make entrypoint script executable
+RUN chmod +x entrypoint.sh
 
-# Create a non-root user
+# Create a non-root user and change ownership
 RUN adduser --disabled-password --gecos '' appuser
 RUN chown -R appuser:appuser /app
+
+# Switch to non-root user
 USER appuser
 
 # Expose port
@@ -46,5 +48,5 @@ EXPOSE 8001
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8001/api/health/ || exit 1
 
-# Run the application using the startup script
-CMD ["./start.sh"] 
+# Use the entrypoint script
+CMD ["./entrypoint.sh"] 
